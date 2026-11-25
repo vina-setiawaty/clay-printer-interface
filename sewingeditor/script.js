@@ -35,6 +35,7 @@ function setup() {
     getInitTemps();
     fab.commands = [
       "G90",
+      "M302",
       "M83",
       "G28",
       `G0 X${initX} Y${initY} Z${initZ} F1500`,
