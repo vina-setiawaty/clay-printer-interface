@@ -1,0 +1,872 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8">
+  <title>3dp sewing machine - textures</title>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.3.1/p5.js"></script>
+  <script src="../lib/p5.fab.sewing.js" type="text/javascript"></script>
+  <script src="https://unpkg.com/p5-webserial@0.1.1/build/p5.webserial.js"></script>
+</head>
+
+<style>
+  *,
+  html {
+    box-sizing: border-box;
+    font-family: sans-serif;
+    font-size: 12px;
+    font-weight: 400;
+    margin: 0;
+    padding: 0;
+  }
+
+  body {}
+
+  canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: -1;
+  }
+
+  h1 {
+    font-size: 0.8rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    position: relative;
+    display: block;
+    clear: both;
+    margin-bottom: 1em;
+  }
+
+  #container {
+    position: relative;
+    width: 100vw;
+    min-height: 100vh;
+    padding: 1em;
+  }
+
+  .btn {
+    padding: 0.5em 0.7em;
+    cursor: pointer;
+    background: #666;
+    color: white;
+    border-radius: 0.7em;
+    transition: all 100ms ease-in;
+    user-select: none;
+  }
+
+  .btn:hover {
+    background: #777;
+  }
+
+  .btn:active {
+    background: #888;
+  }
+
+  .btn.active {
+    background: #33AA00;
+  }
+
+  div.ui-frame {
+    margin: 1em;
+    padding: 0.5em 0.75em;
+    border: 1px solid #999;
+    border-radius: 0.5em;
+    position: relative;
+    float: left;
+    display: block;
+  }
+
+  div.ui-group {
+    position: relative;
+    display: block;
+    clear: both;
+    margin-top: 0.5em;
+  }
+
+  div.ui-group::after {
+    content: "";
+    display: table;
+    clear: both;
+  }
+
+  div.ui-item {
+    position: relative;
+    float: left;
+    margin: 0 1em 0.3em 0;
+    border-radius: 0.2em;
+  }
+
+  span.label {
+    font-family: monospace;
+    font-size: 0.8em;
+    display: inline-block;
+    padding-right: 0.4em;
+  }
+
+  div.ui-item input[type=number] {
+    width: 5em;
+  }
+
+  div.ui-item input[type=checkbox] {
+    padding: 0;
+    margin: 0;
+  }
+
+  #messages {
+    width: 200px;
+    height: 20em;
+    overflow: scroll;
+  }
+
+  #messages h1 span u {
+    position: absolute;
+    right: 0;
+    top: 0.5em;
+    font-size: 0.7em;
+    color: #CCC;
+    cursor: pointer;
+  }
+
+  #messages li {
+    position: relative;
+    clear: both;
+    font-family: monospace;
+    font-size: 0.8em;
+    list-style: none;
+  }
+
+  .motion.btn {
+    background: white;
+    border: 1px solid #999;
+    color: black;
+    width: 3em;
+    height: 3em;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .motion.btn:hover {
+    background: #EEE;
+  }
+
+  .motion.btn:active {
+    background: #DDD;
+  }
+
+  #actions-container {
+    width: 95%;
+  }
+
+  #raw-gcode-container {
+    width: 560px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .raw-gcode-columns {
+    display: flex;
+    gap: 1em;
+    flex: 1;
+    min-height: 0;
+  }
+
+  .raw-gcode-editor-col {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .raw-gcode-editor-col #gcode-field-editor {
+    flex: 1;
+    display: flex;
+    margin-top: 0;
+  }
+
+  #raw-gcode-textarea {
+    flex: 1;
+    width: 100%;
+    resize: none;
+  }
+
+  /* ---- toolpath viewer (gcode-viewer.js, from parametric-with-tool) ---- */
+  .raw-gcode-viewer-col {
+    flex: 1.4;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  #pg-toolpath-wrap {
+    position: relative;
+    height: 22em;
+    border: 1px solid #DDD;
+    border-radius: 0.3em;
+    overflow: hidden;
+    margin-top: 0.4em;
+  }
+  /* override the page-wide `canvas` rule meant for p5's background canvas */
+  #pg-toolpath-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 0;
+    width: 100%;
+    height: 100%;
+    cursor: grab;
+  }
+  #pg-toolpath-canvas:active { cursor: grabbing; }
+  .pg-toolpath-bar { display: flex; flex-wrap: wrap; gap: 0.4em; align-items: center; margin: 0.4em 0 0; }
+  .pg-toolpath-bar .btn { font-size: 0.75em; padding: 0.25em 0.55em; }
+  #pg-toolpath-slider { flex: 1; min-width: 0; }
+  #pg-toolpath-label {
+    font-family: monospace;
+    font-size: 0.75em;
+    color: #666;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-top: 0.3em;
+  }
+  .pg-toolpath-hint { font-family: monospace; font-size: 0.7em; color: #999; }
+
+  .raw-gcode-llm-col {
+    flex: 1;
+    min-width: 0;
+    overflow-y: auto;
+    padding-left: 0.75em;
+    border-left: 1px solid #DDD;
+  }
+
+  #gcode-llm-description {
+    width: 100%;
+    height: 6em;
+  }
+
+  .action-item {
+    width: 20em;
+    position: relative;
+    float: left;
+    margin: 0 2em 2em 0;
+    padding: 1em;
+    background: #F0F0F0;
+    border-radius: 0.5em;
+    min-height: 25em;
+  }
+
+  .action-meta-menu {
+    position: relative;
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .action-modify-btn {
+    cursor: pointer;
+    user-select: none;
+    position: relative;
+    font-size: 0.8em;
+    font-family: monospace;
+    color: #999;
+    margin-bottom: 1em;
+  }
+
+  .action-item h1 {
+    margin-bottom: 0.25em;
+  }
+
+  .action-item p {
+    font-size: 0.8em;
+    margin-bottom: 1.5em;
+    color: #666;
+  }
+
+  .action-item .btn {
+    position: relative;
+    margin-top: 1em;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .action-item .label {}
+
+  #textures-container {
+    width: 95%;
+  }
+
+  #textures {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .texture-item {
+    min-height: 0;
+  }
+
+  .texture-grid {
+    display: grid;
+    grid-template-columns: 1fr 6.5em;
+    gap: 0.25em 0.5em;
+    align-items: center;
+  }
+
+  .texture-grid input,
+  .texture-grid select {
+    width: 100%;
+  }
+
+  .texture-placement {
+    padding-bottom: 0.5em;
+    border-bottom: 1px solid #DDD;
+  }
+
+  .texture-unit {
+    color: #999;
+    font-size: 0.85em;
+  }
+
+  input.texture-modified,
+  select.texture-modified {
+    background: #FFF3B8;
+  }
+
+  .texture-advanced {
+    margin-top: 0.5em;
+  }
+
+  .texture-advanced summary {
+    cursor: pointer;
+    color: #666;
+    margin-bottom: 0.25em;
+  }
+
+  /* the line section has text fields (corners, formulas): give its inputs the room */
+  .texture-placement .texture-grid { grid-template-columns: auto 1fr; }
+  .texture-placement .texture-grid input, .texture-placement .texture-grid select { width: 100%; box-sizing: border-box; }
+
+  .texture-group-title {
+    margin: 0.6em 0 0.2em;
+    font-size: 0.8em;
+    font-weight: bold;
+    color: #666;
+  }
+
+  .texture-sig {
+    margin-top: 0.5em;
+    font-family: monospace;
+    font-size: 0.8em;
+    color: #999;
+  }
+
+  /* ---- function editor (editor.js) ---- */
+  #texture-editor-modal {
+    width: 90vw;
+    height: 86vh;
+    top: 7vh;
+    left: 5vw;
+    box-sizing: border-box;
+    overflow-y: auto;
+  }
+  #texture-editor-modal h1 { margin-top: 0; }
+  .te-layout { display: flex; gap: 1.5em; align-items: flex-start; }
+  .te-main { flex: 1.3; min-width: 0; }
+  .te-viewer-col { flex: 1; min-width: 0; position: sticky; top: 0; max-height: calc(86vh - 5em); overflow-y: auto; }
+  @media (max-width: 900px) { .te-viewer-col { max-height: none; } }
+  .te-params-title { font-size: 1em; margin: 1em 0 0.4em; }
+  #te-toolpath-wrap {
+    position: relative;
+    height: 30em;
+    border: 1px solid #DDD;
+    border-radius: 0.3em;
+    overflow: hidden;
+    margin-top: 0.4em;
+  }
+  /* override the page-wide `canvas` rule meant for p5's background canvas */
+  #te-toolpath-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 0;
+    width: 100%;
+    height: 100%;
+    cursor: grab;
+  }
+  #te-toolpath-canvas:active { cursor: grabbing; }
+  #te-toolpath-slider { flex: 1; min-width: 0; }
+  #te-toolpath-label {
+    font-family: monospace;
+    font-size: 0.75em;
+    color: #666;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-top: 0.3em;
+  }
+  @media (max-width: 900px) {
+    .te-layout { flex-direction: column; align-items: stretch; }
+    .te-viewer-col { position: static; }
+  }
+  .te-head { display: flex; gap: 1em; align-items: center; flex-wrap: wrap; }
+  .te-where { font-family: monospace; font-size: 0.8em; color: #999; }
+  .te-steps {
+    display: flex;
+    list-style: none;
+    margin: 0.8em 0 0.5em;
+    padding: 0;
+    gap: 0.3em;
+  }
+  .te-steps li {
+    flex: 1;
+    text-align: center;
+    padding: 0.3em 0.5em;
+    border-radius: 0.3em;
+    background: #F0F0F0;
+    color: #999;
+    font-size: 0.85em;
+  }
+  .te-steps li.done { background: #CDEBD6; color: #1E6B35; }
+  .te-steps li.current { background: #FFF3B8; color: #7A5B00; font-weight: 600; outline: 2px solid #E6C84A; }
+  .te-steps.te-steps-error li.current { background: #F8D3D3; color: #A00; outline-color: #D88; }
+  .te-status { font-size: 0.9em; line-height: 1.5; margin-bottom: 0.5em; }
+  .te-dirty { color: #B36B00; font-weight: 600; }
+  .te-draft-error { color: #C00; }
+  .te-draft-printed, .te-draft-pushed { color: #1E6B35; }
+  .te-next { color: #333; font-style: italic; }
+  .te-warn { color: #C00; }
+  .te-codes { display: flex; flex-direction: column; gap: 0.75em; }
+  .te-fn-head { font-size: 0.85em; margin-bottom: 0.2em; }
+  .te-code {
+    width: 100%;
+    box-sizing: border-box;
+    font-family: monospace;
+    font-size: 0.8em;
+    tab-size: 2;
+    white-space: pre;
+    resize: vertical;
+  }
+  .te-buttons { display: flex; gap: 0.5em; flex-wrap: wrap; margin-top: 0.5em; }
+  .te-buttons .te-gap { flex: 1; }
+  .te-buttons .btn.te-disabled { opacity: 0.35; cursor: not-allowed; }
+  .te-result {
+    font-family: monospace;
+    font-size: 0.8em;
+    white-space: pre-wrap;
+    margin: 0.5em 0 0;
+    min-height: 1.2em;
+  }
+  .te-result.te-ok { color: #1E6B35; }
+  .te-result.te-err { color: #C00; }
+  .te-note { font-size: 0.8em; color: #999; margin-top: 0.5em; }
+  .te-badge { display: block; font-size: 0.8em; margin: -0.5em 0 0.5em; min-height: 0; }
+  .te-badge-dirty { color: #B36B00; }
+  .te-badge-error { color: #C00; }
+  .te-badge-saved { color: #7A5B00; }
+  .te-badge-printed, .te-badge-pushed { color: #1E6B35; }
+
+  #texture-save-modal {
+    max-width: 640px;
+    left: max(25vw, calc(50vw - 320px));
+  }
+
+  .texture-modal-close {
+    position: absolute;
+    top: 0;
+    right: 0;
+    font-size: 1.5em;
+    cursor: pointer;
+    user-select: none;
+    width: 2em;
+    height: 2em;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .texture-change-list {
+    margin: 0 0 1.5em 1.5em;
+    font-family: monospace;
+  }
+
+  .texture-diff {
+    font-family: monospace;
+    white-space: pre-wrap;
+    background: #F4F4F4;
+    padding: 0.75em;
+    border-radius: 0.5em;
+    margin-bottom: 1.5em;
+  }
+
+  .modal {
+    position: fixed;
+    width: 50vw;
+    height: 80vh;
+    top: 10vh;
+    left: 25vw;
+    background: white;
+    border: 1px solid #999;
+    box-shadow: 0 1em 2em rgba(0, 0, 0, 0.2);
+    border-radius: 1em;
+    z-index: 99;
+    display: none;
+    padding: 2em;
+    overflow-y: scroll;
+  }
+
+  #actions-editor-modal {
+    max-width: 600px;
+    left: max(25vw, calc(50vw - 300px));
+  }
+
+  .modal.active {
+    display: block;
+  }
+
+  #close-modal-btn {
+    position: absolute;
+    top: 0;
+    right: 0;
+    font-size: 1.5em;
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2em;
+    height: 2em;
+  }
+
+  .actions-editor-group {
+    position: relative;
+    clear: both;
+    margin-top: 1em;
+    display: flex;
+    align-items: top;
+    flex-wrap: wrap;
+  }
+
+  .actions-editor-group span.label {
+    width: 10em;
+  }
+
+  .actions-editor-group span.label.description {
+    width: 100%;
+  }
+
+  textarea {
+    height: 10em;
+  }
+
+  .actions-editor-group textarea,
+  .actions-editor-group input {
+    padding: 0.5em;
+  }
+
+  #action-name,
+  #action-description,
+  #action-gcode {
+    width: 25em;
+  }
+
+  #action-variables-container {
+    position: relative;
+    clear: both;
+  }
+
+  .action-variable-item {
+    position: relative;
+    clear: both;
+  }
+
+  .action-variable-item span.label {
+    width: 3em;
+  }
+
+  .action-variable-item input {
+    margin-right: 2em;
+  }
+
+  .close-btn {
+    cursor: pointer;
+    font-size: 1.25em;
+  }
+
+  #actions-editor-messages {
+    font-size: 1em;
+    font-family: monospace;
+    color: red;
+    list-style: none;
+  }
+
+  .editor-divider {
+    clear: both;
+    margin: 1.5em 0;
+    border: none;
+    border-top: 1px solid #DDD;
+  }
+
+  .llm-explanation {
+    font-size: 0.9em;
+    color: #333;
+    background: #F5F5F0;
+    border-radius: 0.5em;
+    padding: 0.75em;
+    white-space: pre-wrap;
+  }
+
+  .llm-explanation:empty {
+    display: none;
+  }
+
+  .llm-cost-tracker {
+    font-size: 0.8em;
+    font-family: monospace;
+    color: #666;
+  }
+
+  .llm-messages {
+    font-size: 1em;
+    font-family: monospace;
+    color: red;
+    list-style: none;
+  }
+
+  .llm-status {
+    font-size: 0.8em;
+    font-family: monospace;
+    color: #666;
+    margin-left: 1em;
+  }
+</style>
+
+<body>
+
+  <div id="container">
+    <div class="ui-frame" id="messages">
+      <h1>Messages <span onclick="clearMsg()"><u>clear</u></span></h1>
+      <div id="message-container">
+      </div>
+    </div>
+
+    <div class="ui-frame" id="main-controller">
+      <h1>Main Controller</h1>
+
+      <div class="ui-group">
+        <div class="ui-item">
+          <div class="btn" id="connect-btn" onclick="_fab.serial.requestPort()">connect to printer</div>
+        </div>
+      </div>
+
+      <div class="ui-group">
+        <div class="ui-item">
+          <span class="label">Origin</span>
+        </div>
+      </div>
+
+      <div class="ui-group">
+        <div class="ui-item">
+          <span class="label">X</span> <input type="number" min="0" step="1" value="100" id="start-x">
+        </div>
+        <div class="ui-item">
+          <span class="label">Y</span> <input type="number" min="0" step="1" value="100" id="start-y">
+        </div>
+        <div class="ui-item">
+          <span class="label">Z</span> <input type="number" min="0" step="1" value="10" id="start-z">
+        </div>
+      </div>
+
+      <div class="ui-group">
+        <div class="ui-item">
+          <div class="btn" id="start-btn" onclick="">initialize printer</div>
+        </div>
+        <div class="ui-item">
+          <div class="btn" id="stop-btn" onclick="">stop printing</div>
+        </div>
+      </div>
+
+      <div class="ui-group">
+        <div class="ui-item">
+          <span class="label">Nozzle Temp</span> <input type="number" min="0" step="1" value="200" id="nozzle-temp">
+        </div>
+        <div class="ui-item">
+          <span class="label">Bed Temp</span> <input type="number" min="0" step="1" value="60" id="bed-temp">
+        </div>
+      </div>
+
+      <div class="ui-group">
+        <div class="ui-item">
+          <div class="btn" id="heat-btn" onclick="">heat nozzle/bed</div>
+        </div>
+        <div class="ui-item">
+          <div class="btn" id="cool-btn" onclick="">cool nozzle/bed</div>
+        </div>
+      </div>
+
+      <div class="ui-group">
+        <div class="ui-item">
+          <span class="label">Fan Speed (0&ndash;255)</span> <input type="number" min="0" step="1" value="255"
+            id="fan-speed">
+        </div>
+        <div class="ui-item">
+          <span class="label">fan on</span>
+          <input type="checkbox" id="fan-on">
+        </div>
+      </div>
+
+    </div>
+
+    <div class="ui-frame" id="motion-controller">
+      <h1>Motion controller</h1>
+      <div class="ui-group">
+        <div class="ui-item">
+          <span class="label">motion step</span> <input type="number" min="0" step="0.1" value="5.0"
+            id="motion-step-size">
+        </div>
+        <div class="ui-item">
+          <span class="label">feedrate</span> <input type="number" min="0" step="1" value="300" id="motion-feedrate">
+        </div>
+      </div>
+      <div class="ui-group">
+        <div class="ui-item">
+          <div class="btn motion" id="motion-z-up-btn">Z+</div>
+        </div>
+        <div class="ui-item">
+          <div class="btn motion" id="motion-y-up-btn">Y+</div>
+        </div>
+        <div class="ui-item">
+          <div class="btn motion" id="motion-e-down-btn">E-</div>
+        </div>
+      </div>
+      <div class="ui-group">
+        <div class="ui-item">
+          <div class="btn motion" id="motion-x-down-btn">X-</div>
+        </div>
+        <div class="ui-item">
+          <div class="btn motion" id="motion-home-btn">O</div>
+        </div>
+        <div class="ui-item">
+          <div class="btn motion" id="motion-x-up-btn">X+</div>
+        </div>
+      </div>
+      <div class="ui-group">
+        <div class="ui-item">
+          <div class="btn motion" id="motion-z-down-btn">Z-</div>
+        </div>
+        <div class="ui-item">
+          <div class="btn motion" id="motion-y-down-btn">Y-</div>
+        </div>
+        <div class="ui-item">
+          <div class="btn motion" id="motion-e-up-btn">E+</div>
+        </div>
+      </div>
+
+      <div class="ui-group">
+        <div class="ui-item">
+          <span class="label">enable cold extrusion</span>
+          <input type="checkbox" id="cold-extrusion">
+        </div>
+      </div>
+
+      <div class="ui-group">
+        <div class="ui-item">
+          <span class="label">keyboard control</span>
+          <input type="checkbox" id="motion-keyboard-control">
+        </div>
+      </div>
+      <div class="ui-group" id="motion-keyboard-control-instructions" style="display: none;">
+        <div class="ui-item">
+          <span class="label">A/D: X-/+; S/W: Y-/+; Z/Q: Z-/+; R/E: E-/+</span>
+        </div>
+      </div>
+    </div>
+    <div class="ui-frame" id="raw-gcode-container" style="width: 820px;">
+      <h1>Raw gcode</h1>
+      <div class="raw-gcode-columns">
+        <div class="raw-gcode-editor-col">
+          <div class="ui-group" id="gcode-field-editor">
+            <textarea id="raw-gcode-textarea"></textarea>
+          </div>
+          <div class="ui-group" id="raw-gcode-menu">
+            <div class="ui-item">
+              <div class="btn" id="run-gcode-btn">run gcode</div>
+            </div>
+            <div class="ui-item">
+              <div class="btn" id="save-gcode-btn">save gcode</div>
+            </div>
+          </div>
+        </div>
+        <!-- toolpath preview of the textarea (gcode-viewer.js) -->
+        <div class="raw-gcode-viewer-col">
+          <div class="pg-toolpath-bar">
+            <span class="btn" id="pg-toolpath-top">top</span>
+            <span class="btn" id="pg-toolpath-iso">3D</span>
+            <span class="btn" id="pg-toolpath-fit">fit</span>
+            <span class="btn" id="pg-toolpath-travel" title="show travel (non-extruding) moves">travel</span>
+            <span class="pg-toolpath-hint">drag: orbit · right/shift-drag: pan · wheel: zoom</span>
+          </div>
+          <div id="pg-toolpath-wrap"><canvas id="pg-toolpath-canvas"></canvas></div>
+          <div class="pg-toolpath-bar">
+            <span class="btn" id="pg-toolpath-play">play</span>
+            <input type="range" id="pg-toolpath-slider" min="0" max="0" value="0" step="1">
+          </div>
+          <div id="pg-toolpath-label"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- function editor (editor.js), a modal opened by "edit code" on a card -->
+    <div class="modal" id="texture-editor-modal">
+      <div class="texture-modal-close" id="texture-editor-close" title="close (Esc)">&times;</div>
+      <h1>Function editor</h1>
+      <div class="te-layout">
+        <div class="te-main"><div id="texture-editor"></div></div>
+        <!-- toolpath preview of the last save / run (a second GcodeViewer) -->
+        <div class="te-viewer-col">
+          <div class="pg-toolpath-bar">
+            <span class="btn" id="te-toolpath-top">top</span>
+            <span class="btn" id="te-toolpath-iso">3D</span>
+            <span class="btn" id="te-toolpath-fit">fit</span>
+            <span class="btn" id="te-toolpath-travel" title="show travel (non-extruding) moves">travel</span>
+          </div>
+          <div id="te-toolpath-wrap"><canvas id="te-toolpath-canvas"></canvas></div>
+          <div class="pg-toolpath-bar">
+            <span class="btn" id="te-toolpath-play">play</span>
+            <input type="range" id="te-toolpath-slider" min="0" max="0" value="0" step="1">
+          </div>
+          <div id="te-toolpath-label"></div>
+          <div class="pg-toolpath-hint">save to preview · drag: orbit · right/shift-drag: pan · wheel: zoom</div>
+          <!-- the texture's card inputs (texture-actions.js renderParams), synced with the card -->
+          <h2 class="te-params-title">Parameters</h2>
+          <div id="te-params"></div>
+          <div class="btn" id="te-run-once" title="prints the saved draft (or the file) with these parameters -- at any step">run once</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ui-frame" id="textures-container">
+      <h1>Textures</h1>
+      <div class="ui-group" id="texture-link">
+      </div>
+      <div class="ui-group" id="texture-new">
+      </div>
+      <div class="ui-group" id="texture-filament">
+      </div>
+      <div class="ui-group" id="texture-settings">
+      </div>
+      <div class="ui-group" id="textures">
+      </div>
+    </div>
+  </div>
+
+  <script type="text/javascript" src="../script.js?v=4"></script>
+  <script type="text/javascript" src="texture-actions-compat.js"></script>
+  <script type="module" src="texture-actions.js?v=13"></script>
+  <script type="text/javascript" src="gcode-viewer.js?v=2"></script>
+  <script type="text/javascript" src="../nav.js?v=1"></script>
+</body>
+
+</html>

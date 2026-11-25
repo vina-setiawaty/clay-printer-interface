@@ -1,0 +1,174 @@
+# LLM API Data Flow
+
+> **Keep this current:** whenever a system prompt (`buildSystemPrompt()` in `llm.js`, `buildGcodeSystemPrompt()` in `llm-gcode.js`, `buildGcodeSessionSystemPrompt()` in `gcode-session.js`, or `buildParametricSystemPrompt()` in `parametric.js`) or an endpoint's generation settings change, update the matching section here and in the linked system-prompt doc in the same change.
+
+There are **five** independent generation flows in the app, each a click on its own "generate"/"send" button. Most follow a two-hop shape — browser → Vercel proxy → LLM provider — via shared proxy logic, but two flows now skip the proxy and call the provider straight from the browser (see **Client-direct flows** below). Each flow has its own frontend and system prompt:
+
+| Flow | Frontend | Call path | Schema | System prompt |
+|---|---|---|---|---|
+| Action generation | `llm.js`, action editor's LLM panel | proxied: `POST /api/generate` | `ACTION_SCHEMA` in `api/generate.js` | [llm-system-prompt.md](../main/llm-system-prompt.md) |
+| Raw gcode generation | `llm-gcode.js`, "Raw gcode" panel (`index.html`) | proxied: `POST /api/generate-gcode` | `GCODE_SCHEMA` in `api/generate-gcode.js` | [gcode-system-prompt.md](../main/gcode-system-prompt.md) |
+| Raw gcode, multi-turn session | `gcode-session.js`, "Raw gcode — printing session" panel (`gcode-session.html`) | proxied: `POST /api/generate-gcode` (same endpoint/schema as above) | `GCODE_SCHEMA` in `api/generate-gcode.js` | [gcode-session-system-prompt.md](../gcode-session/gcode-session-system-prompt.md) |
+| Parametric tactile graphic | `parametric/parametric.js`, 3-column page (`parametric/parametric.html`) | proxied: `POST /api/generate-parametric` | `PARAMETRIC_SCHEMA` in `api/generate-parametric.js` | [../parametric/docs/system-prompt.md](../parametric/docs/system-prompt.md) (concatenated with `catalog.md` / `path-spec.md` / `hardware.md` / `PARAMETER_CONSTRAINTS.md`) |
+| Parametric tactile graphic, **client-direct fork (experimental)** | `parametric-on-client/parametric.js`, same 3-column layout (`parametric-on-client/parametric-on-client.html`) | **client-direct**: browser calls the provider straight (`callLlmDirect()` in `llm.js`) | own copy of `PARAMETRIC_SCHEMA` in `parametric-on-client/parametric.js` | [../parametric-on-client/docs/system-prompt.md](../parametric-on-client/docs/system-prompt.md) (same doc set as the proxied page, forked) |
+| Parametric tactile graphic, **staged pipeline (experimental, client-direct)** | `parametric-with-tool/parametric-with-tool.js`, 3-column page (`parametric-with-tool/parametric-with-tool.html`) | **client-direct**: browser calls the provider straight once per call (`route` / `geometry` / `texture` / `ui` / `judge`) | per-stage schemas in `parametric-with-tool/stage-schemas.js` | `parametric-with-tool/docs/stage-*.md` + the `ref-*.md` modules each stage needs, plus generated limit text — assembled by `parametric-with-tool/prompt-assembly.js` |
+
+**The two parametric-graphic flows (proxied and client-direct alike) are structurally different from the plain gcode flows:**
+- They are **multi-turn**: the request carries `messages` (a `{role, content}[]` transcript) instead of a single `userMessage`. The proxied path's `handleGenerateRequest()` accepts either shape; the client-direct path's `callLlmDirect()` (in `llm.js`) always sends `messages`. Either way, OpenAI's Responses `input` gets `input_text`/`output_text` typed parts per turn; Anthropic's `messages` takes the array as-is.
+- The model returns **no G-code** — it returns `{ chat, calls[] }` (single-call pages) or per-stage JSON (the staged pipeline), never raw gcode text. A local catalog module (`parametric-catalog.js` / `parametric-catalog-with-tool.js`) executes the result against a pinned `texture_functions.js` copy to produce the G-code; editing a parameter re-runs that locally with no API call.
+
+**Client-direct flows (`parametric-on-client`, `parametric-with-tool`):** the browser calls `https://api.openai.com/v1/responses` or `https://api.anthropic.com/v1/messages` directly, using a per-provider API key the user enters (stored in `localStorage` via `saveApiKeyFrom`/`loadApiKeyInto` in `llm.js`, one slot per provider, shared across every client-direct page). There is no app-secret gate and no server-side model/effort allowlist — cost and validity are the key owner's problem, not a shared budget. Anthropic requires the request header `anthropic-dangerous-direct-browser-access: true` or it refuses the call outright; OpenAI's API answers direct browser calls with no special header (confirmed against the live API — both a CORS preflight and a real request return `Access-Control-Allow-Origin: *`), though it's the less battle-tested of the two paths here since anti-bot layers in front of some APIs are known to treat automated/headless browser traffic differently from a normal user's browser. `callOpenAIDirect()`/`callAnthropicDirect()`/`callLlmDirect()` in `llm.js` mirror `api/_lib/llm-proxy.js`'s `callOpenAI()`/`callAnthropic()`/`handleGenerateRequest()` almost line for line — keep them in sync if the upstream request shape changes. The proxied endpoints these two pages used to call (`api/generate-parametric.js`, `api/parametric-stage.js`) are left in place as a dormant fallback, not deleted.
+
+**The parametric pages live in fully separate folders** — `sewingeditor/parametric/` (proxied), `sewingeditor/parametric-on-client/` (its client-direct fork), and `sewingeditor/parametric-with-tool/` (the client-direct staged pipeline), each with its own docs subfolder, HTML/JS, and `localStorage` key. Only the shared, page-agnostic files (`script.js`, `llm.js`, `api/_lib/llm-proxy.js`) sit outside all three.
+
+The three still-proxied endpoints call into the same `handleGenerateRequest()` in `api/_lib/llm-proxy.js` (app-secret gate, input validation, `userMessage`-or-`messages` normalization, calling the chosen provider, relaying the response) — each just supplies its own schema and generation settings:
+
+| Setting | Action generation | Raw gcode generation | Parametric graphic | Why they differ |
+|---|---|---|---|---|
+| `max_output_tokens` / `max_tokens` | 8192 | 32768 | 32768 | A tactile graphic can expand into hundreds/thousands of gcode lines / many calls; an action macro is a handful of lines. |
+| `reasoning.effort` / `output_config.effort` | `medium` | `medium` (client-selectable) | `medium` (client-selectable) | Gcode/graphic generation involves real spatial reasoning; actions are short parameterized templates. |
+| Anthropic `thinking` | `disabled` | `adaptive` (gated on the client toggle) | `adaptive` (gated on the client toggle) | Same reasoning-load difference as above. |
+
+## Hop 1: Browser → proxy
+
+**Action generation** (`POST /api/generate`) — request built by `buildRequestBody()` in `llm.js`:
+
+| Field | Type | Content |
+|---|---|---|
+| `provider` | `string` | `"openai"` or `"anthropic"` |
+| `model` | `string` | e.g. `"gpt-5.6-terra"` or `"claude-sonnet-5"` |
+| `systemPrompt` | `string` | `buildSystemPrompt()` — full text in [llm-system-prompt.md](../main/llm-system-prompt.md) |
+| `userMessage` | `string` | `buildUserMessage()` — a stringified JSON snapshot of the current Manual-tab form, followed by the typed instruction |
+
+The `userMessage` string embeds this object (from `collectManualFormState()`):
+```ts
+{
+  name: string,
+  description: string,
+  variables: { key: string, default: number }[],
+  gcode: string[]   // current lines in the action editor's GCode textarea
+}
+```
+
+**Raw gcode generation** (`POST /api/generate-gcode`) — request built by `buildGcodeRequestBody()` in `llm-gcode.js`, same `provider`/`model` shape, but:
+
+| Field | Type | Content |
+|---|---|---|
+| `systemPrompt` | `string` | `buildGcodeSystemPrompt()` — full text in [gcode-system-prompt.md](../main/gcode-system-prompt.md) |
+| `userMessage` | `string` | `buildGcodeUserMessage()` — a stringified JSON snapshot of the current raw-gcode box, followed by the typed instruction |
+
+The `userMessage` string embeds this object (from `collectGcodeBoxState()`):
+```ts
+{
+  gcode: string[]   // current lines in the "Raw gcode" textarea
+}
+```
+
+**Raw gcode, multi-turn session** (`POST /api/generate-gcode`, same endpoint as above) — request built by `buildGcodeSessionRequestBody()` in `gcode-session.js`. The wire shape sent to the proxy is **identical** to plain raw-gcode generation (`provider`/`model`/`effort`/`thinking`/`systemPrompt`/`userMessage`, all strings) — no backend change was needed for this flow. `userMessage` itself is also the same shape as above (current textarea content + typed instruction, via `collectGcodeSessionBoxState()`). All of the session-specific context — filament, print temp, Z-start offset, continuity mode, whether the substrate is fresh, the app-chosen prime coordinate for this turn, and a short summary of prior turns — lives entirely in `systemPrompt` instead, rebuilt fresh from client-side session state (`gcodeSession`, persisted to `localStorage["gcodeSessionState"]`) on every call. See [gcode-session-system-prompt.md](../gcode-session/gcode-session-system-prompt.md) for how that state shapes the prompt.
+
+Both endpoints require header `x-app-secret: <app password>`, and on success relay the *entire raw upstream response* back verbatim (`res.status(200).json(data)`) — so what the browser gets is literally whatever OpenAI or Anthropic returned (see Hop 2's output below). On failure, both return `{ error: string }` with a matching HTTP status.
+
+## Hop 2: Proxy → the LLM provider
+
+### If `provider === "openai"` → `POST https://api.openai.com/v1/responses`
+
+**Input** (values shown are the action-generation defaults; see the settings table above for the gcode endpoint's values):
+```json
+{
+  "model": "gpt-5.6-terra",
+  "instructions": "<systemPrompt>",
+  "input": "<userMessage>",
+  "max_output_tokens": 8192,
+  "reasoning": { "effort": "medium" },
+  "text": {
+    "format": { "type": "json_schema", "name": "action", "schema": ACTION_SCHEMA, "strict": true }
+  }
+}
+```
+`name` is `"action"` for the action endpoint and `"gcode"` for the raw-gcode endpoint. Auth: `authorization: Bearer <OPENAI_API_KEY>`.
+
+**Output** (fields the app reads, per `extractResponseOutput()` in `llm.js`, shared by both flows):
+- `output: []` — array of items; walked for one with `type: "message"`, then its `content: []` for a block of `type: "output_text"` (→ `.text`, the generated JSON string) or `type: "refusal"` (→ `.refusal`, a string).
+- `status` / `incomplete_details.reason` — used by `wasTruncated()` to detect a token-limit cutoff.
+- `usage: { input_tokens: number, output_tokens: number, ... }` — feeds the cost tracker.
+
+### If `provider === "anthropic"` → `POST https://api.anthropic.com/v1/messages`
+
+**Input** (action-generation defaults; see the settings table above for the gcode endpoint's values):
+```json
+{
+  "model": "claude-sonnet-5",
+  "max_tokens": 8192,
+  "thinking": { "type": "disabled" },
+  "output_config": {
+    "effort": "medium",
+    "format": { "type": "json_schema", "schema": ACTION_SCHEMA }
+  },
+  "system": "<systemPrompt>",
+  "messages": [{ "role": "user", "content": "<userMessage>" }]
+}
+```
+Auth: `x-api-key: <ANTHROPIC_API_KEY>` + `anthropic-version: 2023-06-01`.
+
+**Output:**
+- `content: []` — the block with `type: "text"` → `.text` is the generated JSON string.
+- `stop_reason` — `"max_tokens"` is what `wasTruncated()` checks for.
+- `usage: { input_tokens: number, output_tokens: number, ... }` — same field names as OpenAI.
+
+## The final payload
+
+**Action generation** — `ACTION_SCHEMA` constrains both providers, so once `extractResponseOutput()`'s `.text` string is `JSON.parse()`d, the result is:
+```ts
+{
+  name: string,
+  description: string,
+  variables: { key: string, default: number }[],
+  gcode: string[],
+  explanation: string   // chat-style summary of what was generated, why, and any caveats
+}
+```
+`validateGeneratedAction()` checks `variables`/`gcode`, `applyResultToManualForm()` writes `name`/`description`/`variables`/`gcode` into the Manual-tab DOM fields, and `explanation` is rendered as-is into `#llm-explanation`.
+
+**Raw gcode generation** — `GCODE_SCHEMA` constrains both providers:
+```ts
+{
+  gcode: string[],
+  explanation: string
+}
+```
+No `name`/`description`/`variables` — raw gcode has no action-style templating. `validateGeneratedGcode()` checks `gcode` (including flagging any accidental `__`/`{}` syntax, which isn't supported here), `applyResultToGcodeBox()` writes `gcode` into `#raw-gcode-textarea`, and `explanation` is rendered into `#gcode-llm-explanation`.
+
+**Raw gcode, multi-turn session** — same `GCODE_SCHEMA` shape, `{gcode: string[], explanation: string}` (a fresh-turn `gcode` is a full job; a continuation-turn `gcode` is only that turn's new lines, per the SESSION CONTINUITY branch used — see [gcode-session-system-prompt.md](../gcode-session/gcode-session-system-prompt.md)). `validateGeneratedSessionGcode()` runs the same checks as the single-turn flow. `applyResultToSessionGcodeBox()` writes `gcode` into `#raw-gcode-textarea` and stashes the result as `pendingTurn` (not yet committed to session history). Only clicking `#run-gcode-btn` — which both streams the gcode to the printer *and* triggers `commitPendingTurnIfMatches()` — appends `pendingTurn` to `gcodeSession.turns` and renders it into the Session History panel; a Generate that's never run leaves history untouched.
+
+**Parametric tactile graphic** — `PARAMETRIC_SCHEMA` constrains both providers to:
+```ts
+{
+  chat: string,          // conversational reply, appended to the column-1 transcript
+  calls: {
+    fn: string,          // allowlisted texture_functions.js name
+    geometry: string,    // JSON string: {"path": <spec>} | {"at": [x,y]} | {"region": {...}, "fillStyle": "..."}
+    options: string,     // JSON string: { optionName: value }
+    label: string,
+  }[]
+}
+```
+`parametric.js` `applyModelResult()` parses each `geometry`/`options` string to an object, replaces `pstate.calls`, and persists to `localStorage["parametricSessionState"]` (transcript + calls + material). `parametric-catalog.js` `runCalls()` then executes the list against the pinned `parametric/docs/texture_functions.js`: builds `xFunc`/`yFunc` from each path spec (a `polyline` is expanded to one library call per segment, since the sampler rejects sharp turns), wraps the whole list in `em.header()`/`em.footer()`, and runs verification (bed bounds with G90/G91 tracking, `verifyLayout` — bbox overlap downgraded to a warning here — net-E tripwire, `verifyCheckerboard` after any `DIAMOND` fill, `PathTooSteepError` surfaced per call). The G-code goes into the shared `#raw-gcode-textarea`; run/save reuse `script.js`. Editing any field in column 2 re-runs `runCalls()` locally — no API call. Enforced limits live in `parametric-catalog.js`'s `CONSTRAINTS`, mirroring `parametric/docs/PARAMETER_CONSTRAINTS.md` (currently placeholder numbers pending hardware calibration).
+
+**Parametric tactile graphic, client-direct fork (experimental)** — `parametric-on-client/parametric.js` is a byte-for-byte fork of the flow above, minus the proxy hop: `onParametricSend()` calls `callLlmDirect()` (in `llm.js`) with a local copy of `PARAMETRIC_SCHEMA` instead of `fetch("/api/generate-parametric")`, and reads the API key from `#pg-openai-key`/`#pg-anthropic-key` instead of an app-secret field. Everything downstream of getting `{chat, calls[]}` back — `applyModelResult()`, `parametric-catalog.js`, the G-code pipeline — is identical. State persists separately, to `localStorage["parametricOnClientSessionState"]`, so the two pages can be open and compared side by side without clobbering each other's session.
+
+Prompt assembly for that pipeline lives in `parametric-with-tool/prompt-assembly.js` (a DOM-free module, so `tests/parametric/prompt-assembly.mjs` builds every stage's real prompt under node). It decides which `ref-*.md` modules each stage receives — the texture stage gets the brush and pattern menus but not the geometry language, the router gets neither — and appends sections generated from the catalog's `PRINT_LIMITS` / `LEGIBILITY_GUIDE` rather than from a hand-written table. It also owns how a file is read: a `stage-*.md` contributes only its fenced prompt block, a `ref-*.md` is used whole. Applying the fenced-block rule to every file alike (as the page did until 2026-09-15) truncated `reference-machine.md` to the 712 characters of its first JSON example, so the machine table, safe-area rule, expression grammar and element tables reached no stage at all.
+
+**Parametric tactile graphic, staged pipeline (experimental, client-direct)** — `parametric-with-tool.js` holds a **scene** (elements with ids, a texture per element slot with its option values, a global transform, and the parameter groups the panel surfaces) instead of a call list, and calls the provider directly once per stage via `callStage()` → `callLlmDirect()` (in `llm.js`), using the schema/settings for that stage from `parametric-with-tool/stage-schemas.js`: `route` (the manager — capped transcript + a scene summary → entry stage, a self-contained instruction, target ids, acceptance criteria; cheapest settings), then a chain of `geometry` (element definitions), `texture` (brush/stamp + fill pattern per slot **and their option values**) and `ui` (which parameters the panel surfaces, grouped by the tactile attribute they affect). Only the router sees the conversation history; the other stages are single-turn and receive the instruction plus the current scene state (elements, textures, option specs, the page's geometry report) as text.
+
+The `ui` stage replaced an earlier `parameters` stage that both set the numbers and invented weighted "abstraction" knobs — the page then moved every target by `direction × weight × (value − base) × range`. That put an opaque, model-invented mapping between the user and their own values, re-derived each turn. Now the relationships live in a curated table (`parametric-with-tool/attributes.js`, one entry per tactile attribute listing the brush options, pattern fields and graphic-level parameters that affect it, with a direction), the `ui` stage only chooses which of them to surface and how to label them, and every control edits its own option directly. `validateStageOutput("ui")` rejects a member the table does not connect to the named attribute; a `custom` group is the way to surface anything else. (`api/parametric-stage.js` — the proxied path this page used before — still exists and imports the same `stage-schemas.js`, but nothing calls it any more; it's a dormant fallback, not deleted.)
+
+Every turn runs through `parametric-with-tool/pipeline.js`, which is pure control flow with the model call injected, so `tests/parametric/pipeline.mjs` drives the whole loop offline with a scripted fake model. There are two layers of checking, answering different questions:
+
+- **A deterministic gate after every call.** Schema, ids and option ranges, then an actual `compileScene()` of a draft built by running the real merge over a clone. It answers "can the next stage work with this?", and nothing reaches the next stage until it can. A failure goes straight back to the *same* stage as a repair call, with the errors verbatim and its own previous answer quoted (`composeUserMessage`'s `repair` block), bounded at 2 repairs. Previously a rejected stage ended the turn with a retry link and the model was never told what was wrong.
+- **One judge call at the end** (`stage-judge.md`), gated by the page's Self-check toggle. It answers "is this what was asked for?" against the acceptance criteria the manager wrote at the start of the turn and the app's own measured report, and returns `{pass, failures: [{criterion, evidence, suspectedStage}], note}`. Its failures go back to the **manager** in refine mode (`composeRefineMessage`), which decides which specialist re-runs; the chain suffix from that stage runs again. Bounded at 2 refine rounds, and the manager may answer `chat` instead to put a question to the user.
+
+This replaced per-stage `geometry-check` / `texture-check` passes, which both judged and patched in one low-effort call and whose patch was merged without recompiling. Those replaced an even earlier design where the generation call self-verified with Anthropic's server-side `code_execution` tool, which competed with the JSON answer for the same token and time budget. No stage requests a tool; `extractResponseOutput()`'s last-text-block handling and the `pause_turn` guard in `_lib/llm-proxy.js` are unused by this page (kept for other endpoints).
+
+The turn's acceptance criteria and their ✓/✗ outcome are rendered under the print digest, so what the manager decided "done" meant is visible rather than implicit.
+
+Each stage's JSON is validated and merged by `parametric-catalog-with-tool.js` (`validateStageOutput()`, `mergeGeometry()` / `mergeTextures()` / `mergeUi()`), which then compiles the scene locally (`compileScene()` → jobs → `runJobs()` against the brush/pattern/stamp library `parametric-with-tool/docs/texture_functions-with-tool.js`) and runs the physical checks (safe area, closure, steepness, retraction cap, relief floor, fusing minima, fill-on-fill overlap). State persists in `localStorage["parametricWithToolSessionState"]`.
