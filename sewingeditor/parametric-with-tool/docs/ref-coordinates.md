@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| Bed | 220 × 220 mm — every printed coordinate must stay inside X/Y **15–205** |
+| Bed | 300 × 300 mm (max Z 500 mm) — every printed coordinate must stay inside X/Y **15–285** |
 | Layer height | 0.20 mm; relief of at least 0.40 mm (2 layers) is recommended for reliable tactile feel, but not enforced -- go thinner if asked to |
 | Default bead width | 0.5 mm |
 | Material | **TPU** unless the user names PLA (the page sets temperatures and flow itself) |
@@ -24,13 +24,13 @@ sensible printed size (a chart 60–120 mm wide) inside the safe area; the
 user rescales or moves it with the transform, not by asking for new
 coordinates.
 
-**Every curve's Y (and X) must land inside 15–205 after whatever data→mm
+**Every curve's Y (and X) must land inside 15–285 after whatever data→mm
 mapping you chose.** Plugging a function straight through as millimetres
 without checking its actual range at the domain you picked is the most
 common way to break this — a downward parabola with a wide domain, an
 unshifted trig function, a steep line, all commonly swing well past the
 bed. Before finalizing, evaluate each formula's own y at its own
-endpoints and a midpoint and confirm those numbers land in 15–205; if
+endpoints and a midpoint and confirm those numbers land in 15–285; if
 not, shift the mapping's offset or shrink the domain until they do.
 
 Pattern spacing is written in the graphic's own units and scales with the

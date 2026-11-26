@@ -51,9 +51,9 @@ compiler needs in order to close a shape.
 
 | Key | Applies to | Value | Note |
 | --- | --- | --- | --- |
-| `bed` | bed size in mm, both axes | **220** | absolute bound on any emitted coordinate |
+| `bed` | bed size in mm, both axes | **300** | absolute bound on any emitted coordinate |
 | `safeMin` | minimum X/Y for every printed coordinate | **15** | margin the prime line and the bed clips need |
-| `safeMax` | maximum X/Y for every printed coordinate | **205** |  |
+| `safeMax` | maximum X/Y for every printed coordinate | **285** |  |
 | `closureSnapMm` | a region boundary's end vs. its start | **0.5** | within this snaps closed; a larger gap is closed with a straight edge and warned about |
 
 ## 3. Tactile legibility — guidance, NOT enforced

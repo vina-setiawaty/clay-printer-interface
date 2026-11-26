@@ -12,7 +12,7 @@
 // textarea are picked up from its "input" event.
 
 (function () {
-  const BED = 220;          // mm, matches BED_X/BED_Y in texture_functions.js
+  const BED = 300;          // mm, matches BED_X/BED_Y in texture_functions.js
   const GRID = 10;          // mm between grid lines
 
   /** G-code text -> { segs: [{a:[x,y,z], b:[x,y,z], extrude, line}], bbox }.

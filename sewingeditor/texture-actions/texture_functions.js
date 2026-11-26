@@ -95,8 +95,9 @@ export const TRAVEL_SPEED = 3000;
 export const Z_HOP = 0.4;
 export const LAYER_HEIGHT = 0.20;
 
-export const BED_X = 220.0;
-export const BED_Y = 220.0;
+export const BED_X = 300.0;
+export const BED_Y = 300.0;
+export const BED_Z = 500.0;
 
 /** mm of filament per mm of XY travel, for a bead of given width/height
  * (for FIL_AREA; the Emitter rescales to the profile's diameter). */

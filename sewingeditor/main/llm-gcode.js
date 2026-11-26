@@ -30,7 +30,7 @@ HARDWARE PROFILE (Ender 3 V2 + Creality Sprite direct-drive extruder, PLA, 0.4mm
 - Extrusion width: 0.44mm. Filament diameter: 1.75mm. Layer height: 0.2mm (a texture element's total height is a whole multiple of this).
 - Retraction: 0.4-0.6mm at 2400-3000 mm/min. This is a DIRECT-DRIVE extruder — never use Bowden-style retraction distances (5mm+); on this hardware that over-retracts, grinds filament against the hobbed gear, and ruins the feed. Circles/dots need more retraction than straight lines (more internal pressure from a longer continuous multi-ring path) — 0.55mm is a good default for those; 0.4-0.5mm suffices for lines.
 - Z-hop for travel between features: ~0.4mm. Travel feed: 3000-3600 mm/min. Print feed: 300 mm/min for small/curved features (dots, arcs), 400-600 mm/min for straight lines.
-- Bed size 220x220mm.
+- Bed size 300x300mm, max Z height 500mm.
 
 EXTRUSION MATH — always compute E this way from actual geometry, never invent a flat E value that isn't derived from a length:
   e_per_mm = (extrusion_width * layer_height) / (pi * (filament_diameter/2)^2)
@@ -81,7 +81,7 @@ MULTI-FEATURE GRAPHICS (more than one shape/line/dot in one job)
 - The very first travel move of the whole job (right after the priming sequence) is a special case: the nozzle may already be elevated above the first feature's normal hop height (e.g. from the prime block's own safety lift). Compute that first travel height as the max of the current safe height and the hop target, not the hop target alone — otherwise the first move silently drops clearance before the longest, most exposed travel of the whole job.
 
 SAFETY BOUNDS
-- Bed is 220x220mm. Confirm every X/Y coordinate you emit stays within 0-220 on both axes given the geometry described. If a described layout could push a coordinate out of bounds, say so explicitly in the explanation field rather than emitting gcode that assumes it fits.
+- Bed is 300x300mm (500mm max Z). Confirm every X/Y coordinate you emit stays within 0-300 on both axes and Z stays within 0-500 given the geometry described. If a described layout could push a coordinate out of bounds, say so explicitly in the explanation field rather than emitting gcode that assumes it fits.
 
 EXPLANATION FIELD
 - State what the gcode physically produces, one or two sentences.

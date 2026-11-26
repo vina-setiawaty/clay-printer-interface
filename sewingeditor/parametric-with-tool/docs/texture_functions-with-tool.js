@@ -53,8 +53,9 @@ export const FLOW_PERCENT = 180;
 // published safe rates for it on a standard hotend commonly sit lower.
 export const MAX_EXTRUSION_RATE_MM3_S = 4.0;
 
-export const BED_X = 220.0;
-export const BED_Y = 220.0;
+export const BED_X = 300.0;
+export const BED_Y = 300.0;
+export const BED_Z = 500.0;
 
 /** mm of filament per mm of XY travel, for a bead of given width/height. */
 export function eRate(width, height, flowMult = 1.0) {

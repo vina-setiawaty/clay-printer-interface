@@ -709,7 +709,7 @@ test("the prompt's limit text is generated from the limit objects", () => {
     assert.ok(limits.includes(String(rule.value)), `${key}'s value ${rule.value} is missing from limitsText()`);
     assert.ok(limits.includes(rule.applies), `${key}'s description is missing from limitsText()`);
   }
-  assert.ok(limits.includes("15-205"), "the safe area comes from GEOMETRY_LIMITS");
+  assert.ok(limits.includes("15-285"), "the safe area comes from GEOMETRY_LIMITS");
   assert.ok(!limits.includes("running sum of E deltas"), "internal rules are not addressed to the model");
   assert.ok(/placeholder/i.test(limits), "the text says the numbers are unconfirmed");
 

@@ -12,7 +12,7 @@
 // textarea are picked up from its "input" event.
 
 (function () {
-  const BED = 220;          // mm, matches CONSTRAINTS.bed in the catalog
+  const BED = 300;          // mm, matches CONSTRAINTS.bed in the catalog
   const GRID = 10;          // mm between grid lines
 
   /** G-code text -> { segs: [{a:[x,y,z], b:[x,y,z], extrude, line}], bbox }.

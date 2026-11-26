@@ -74,9 +74,9 @@ export const PRINT_LIMITS = {
 };
 
 export const GEOMETRY_LIMITS = {
-  bed: { value: 220, applies: "bed size in mm, both axes", note: "absolute bound on any emitted coordinate" },
+  bed: { value: 300, applies: "bed size in mm, both axes", note: "absolute bound on any emitted coordinate" },
   safeMin: { value: 15, applies: "minimum X/Y for every printed coordinate", note: "margin the prime line and the bed clips need" },
-  safeMax: { value: 205, applies: "maximum X/Y for every printed coordinate", note: "" },
+  safeMax: { value: 285, applies: "maximum X/Y for every printed coordinate", note: "" },
   closureSnapMm: { value: 0.5, applies: "a region boundary's end vs. its start", note: "within this snaps closed; a larger gap is closed with a straight edge and warned about" },
 };
 

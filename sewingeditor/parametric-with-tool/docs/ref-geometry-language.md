@@ -94,7 +94,7 @@ points, so the result is checkable rather than your arithmetic.
 
 What still matters on your side:
 
-- **Every point of each bound must land inside 15–205**, including the
+- **Every point of each bound must land inside 15–285**, including the
   parts outside the shaded span — they are drawn as curves in their own
   right.
 - **A bound must give one y per x.** A circle, or anything that doubles
